@@ -84,11 +84,14 @@ export async function getNowPlayingTrack(username: string) {
     throw new Error(response.data.message)
   }
 
-  const track = response.data.recenttracks?.track
+  const tracks = response.data.recenttracks?.track || []
+  
+  // Get the first track (most recent)
+  const track = Array.isArray(tracks) ? tracks[0] : tracks
 
-  if (!Array.isArray(track) && track) {
+  if (track) {
     // Check if it's currently playing (has the "now playing" attribute)
-    if (track["@attr"]?.nowplaying === "true") {
+    if (track["@attr"]?.nowplaying === "true" || track.date === undefined) {
       return track
     }
   }
