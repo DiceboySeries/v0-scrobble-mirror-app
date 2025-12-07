@@ -68,6 +68,34 @@ export async function getRecentTracks(username: string, limit = 10) {
   return Array.isArray(tracks) ? tracks.filter((t: any) => t.date?.uts) : tracks.date?.uts ? [tracks] : []
 }
 
+// Get the currently playing track for a username
+export async function getNowPlayingTrack(username: string) {
+  const response = await axios.get(BASE_URL, {
+    params: {
+      method: "user.getrecenttracks",
+      user: username,
+      api_key: API_KEY,
+      format: "json",
+      limit: 1,
+    },
+  })
+
+  if (response.data.error) {
+    throw new Error(response.data.message)
+  }
+
+  const track = response.data.recenttracks?.track
+
+  if (!Array.isArray(track) && track) {
+    // Check if it's currently playing (has the "now playing" attribute)
+    if (track["@attr"]?.nowplaying === "true") {
+      return track
+    }
+  }
+
+  return null
+}
+
 // Scrobble a track to Account A
 export async function scrobbleToA(
   track: { artist: string; name: string; album?: string },
@@ -107,6 +135,47 @@ export async function scrobbleToA(
     return !response.data.error
   } catch (error) {
     console.error("Scrobble error:", error)
+    return false
+  }
+}
+
+// Update now playing status for a track on Account A
+export async function updateNowPlayingToA(
+  track: { artist: string; name: string; album?: string },
+  sessionKey: string,
+): Promise<boolean> {
+  const params: Record<string, string> = {
+    method: "track.updateNowPlaying",
+    api_key: API_KEY,
+    sk: sessionKey,
+    artist: track.artist,
+    track: track.name,
+  }
+
+  if (track.album) {
+    params.album = track.album
+  }
+
+  const api_sig = sign(params)
+
+  try {
+    const response = await axios.post(
+      BASE_URL,
+      new URLSearchParams({
+        ...params,
+        api_sig,
+        format: "json",
+      }).toString(),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      },
+    )
+
+    return !response.data.error
+  } catch (error) {
+    console.error("Update now playing error:", error)
     return false
   }
 }
