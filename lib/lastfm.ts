@@ -20,6 +20,10 @@ export function sign(params: Record<string, string>): string {
 
 // Get session key from auth token
 export async function getSession(token: string): Promise<{ session: string; name: string }> {
+  console.log("[v0] getSession called with token:", token.substring(0, 10) + "...")
+  console.log("[v0] API_KEY exists:", !!API_KEY)
+  console.log("[v0] API_SECRET exists:", !!API_SECRET)
+
   const params = {
     method: "auth.getSession",
     api_key: API_KEY,
@@ -28,21 +32,32 @@ export async function getSession(token: string): Promise<{ session: string; name
 
   const api_sig = sign(params)
 
-  const response = await axios.get(BASE_URL, {
-    params: {
-      ...params,
-      api_sig,
-      format: "json",
-    },
-  })
+  console.log("[v0] API signature generated:", api_sig.substring(0, 10) + "...")
 
-  if (response.data.error) {
-    throw new Error(response.data.message)
-  }
+  try {
+    const response = await axios.get(BASE_URL, {
+      params: {
+        ...params,
+        api_sig,
+        format: "json",
+      },
+    })
 
-  return {
-    session: response.data.session.key,
-    name: response.data.session.name,
+    console.log("[v0] Last.fm API response status:", response.status)
+    console.log("[v0] Last.fm API response data:", JSON.stringify(response.data))
+
+    if (response.data.error) {
+      console.error("[v0] Last.fm API error:", response.data.message)
+      throw new Error(response.data.message)
+    }
+
+    return {
+      session: response.data.session.key,
+      name: response.data.session.name,
+    }
+  } catch (error) {
+    console.error("[v0] getSession error:", error)
+    throw error
   }
 }
 
@@ -66,37 +81,6 @@ export async function getRecentTracks(username: string, limit = 10) {
 
   // Filter out "now playing" tracks (they don't have a timestamp)
   return Array.isArray(tracks) ? tracks.filter((t: any) => t.date?.uts) : tracks.date?.uts ? [tracks] : []
-}
-
-// Get the currently playing track for a username
-export async function getNowPlayingTrack(username: string) {
-  const response = await axios.get(BASE_URL, {
-    params: {
-      method: "user.getrecenttracks",
-      user: username,
-      api_key: API_KEY,
-      format: "json",
-      limit: 1,
-    },
-  })
-
-  if (response.data.error) {
-    throw new Error(response.data.message)
-  }
-
-  const tracks = response.data.recenttracks?.track || []
-  
-  // Get the first track (most recent)
-  const track = Array.isArray(tracks) ? tracks[0] : tracks
-
-  if (track) {
-    // Check if it's currently playing (has the "now playing" attribute)
-    if (track["@attr"]?.nowplaying === "true" || track.date === undefined) {
-      return track
-    }
-  }
-
-  return null
 }
 
 // Scrobble a track to Account A
@@ -138,47 +122,6 @@ export async function scrobbleToA(
     return !response.data.error
   } catch (error) {
     console.error("Scrobble error:", error)
-    return false
-  }
-}
-
-// Update now playing status for a track on Account A
-export async function updateNowPlayingToA(
-  track: { artist: string; name: string; album?: string },
-  sessionKey: string,
-): Promise<boolean> {
-  const params: Record<string, string> = {
-    method: "track.updateNowPlaying",
-    api_key: API_KEY,
-    sk: sessionKey,
-    artist: track.artist,
-    track: track.name,
-  }
-
-  if (track.album) {
-    params.album = track.album
-  }
-
-  const api_sig = sign(params)
-
-  try {
-    const response = await axios.post(
-      BASE_URL,
-      new URLSearchParams({
-        ...params,
-        api_sig,
-        format: "json",
-      }).toString(),
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-      },
-    )
-
-    return !response.data.error
-  } catch (error) {
-    console.error("Update now playing error:", error)
     return false
   }
 }
