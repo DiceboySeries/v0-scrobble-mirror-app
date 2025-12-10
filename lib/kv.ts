@@ -25,10 +25,10 @@ export async function getSessionKey(username: string): Promise<string | null> {
     .from('sessions')
     .select('session_key')
     .eq('username', username)
-    .single()
+    .maybeSingle()
 
-  if (error) return null
-  return data?.session_key || null
+  if (error || !data) return null
+  return data.session_key
 }
 
 export async function setSessionKey(username: string, sessionKey: string): Promise<void> {
@@ -42,9 +42,9 @@ export async function getMirrorConfig(username: string): Promise<MirrorConfig | 
     .from('mirror_config')
     .select('*')
     .eq('username', username)
-    .single()
+    .maybeSingle()
 
-  if (error) return null
+  if (error || !data) return null
   
   return {
     accountB: data.account_b,
@@ -78,7 +78,7 @@ export async function getScrobbleHistory(username: string): Promise<ScrobbledTra
     .order('mirrored_at', { ascending: false })
     .limit(100)
 
-  if (error) return []
+  if (error || !data) return []
 
   return data.map(row => ({
     artist: row.artist,
@@ -90,17 +90,20 @@ export async function getScrobbleHistory(username: string): Promise<ScrobbledTra
 }
 
 export async function addToScrobbleHistory(username: string, track: ScrobbledTrack): Promise<void> {
-  await supabase
-    .from('scrobble_history')
-    .insert({
-      username,
-      artist: track.artist,
-      track: track.track,
-      album: track.album,
-      timestamp: track.timestamp,
-    })
-    .onConflict('username,timestamp')
-    .ignoreDuplicates()
+  try {
+    await supabase
+      .from('scrobble_history')
+      .insert({
+        username,
+        artist: track.artist,
+        track: track.track,
+        album: track.album,
+        timestamp: track.timestamp,
+      })
+  } catch (error) {
+    // Silently ignore duplicates
+    console.log('Track may already exist:', track.track)
+  }
 }
 
 export async function getAllMirroringUsers(): Promise<string[]> {
@@ -109,6 +112,6 @@ export async function getAllMirroringUsers(): Promise<string[]> {
     .select('username')
     .eq('enabled', true)
 
-  if (error) return []
+  if (error || !data) return []
   return data.map(row => row.username)
 }
