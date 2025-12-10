@@ -29,7 +29,20 @@ async function syncUser(username: string): Promise<{ mirrored: number; total: nu
   let mirrored = 0
 
   for (const track of recentTracks) {
-    const timestamp = track.date.uts
+    // Check if this is a "now playing" track
+    const isNowPlaying = track["@attr"]?.nowplaying === "true"
+    
+    // Skip now playing tracks
+    if (isNowPlaying) {
+      continue
+    }
+
+    const timestamp = track.date?.uts
+    
+    // Skip tracks without timestamps
+    if (!timestamp) {
+      continue
+    }
 
     if (existingTimestamps.has(timestamp)) {
       continue

@@ -79,8 +79,8 @@ export async function getRecentTracks(username: string, limit = 10) {
 
   const tracks = response.data.recenttracks?.track || []
 
-  // Filter out "now playing" tracks (they don't have a timestamp)
-  return Array.isArray(tracks) ? tracks.filter((t: any) => t.date?.uts) : tracks.date?.uts ? [tracks] : []
+  // Return all tracks including "now playing" (we'll handle them separately)
+  return Array.isArray(tracks) ? tracks : tracks ? [tracks] : []
 }
 
 // Scrobble a track to Account A
