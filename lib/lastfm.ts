@@ -20,6 +20,10 @@ export function sign(params: Record<string, string>): string {
 
 // Get session key from auth token
 export async function getSession(token: string): Promise<{ session: string; name: string }> {
+  console.log("[v0] getSession called with token:", token.substring(0, 10) + "...")
+  console.log("[v0] API_KEY exists:", !!API_KEY)
+  console.log("[v0] API_SECRET exists:", !!API_SECRET)
+
   const params = {
     method: "auth.getSession",
     api_key: API_KEY,
@@ -28,21 +32,32 @@ export async function getSession(token: string): Promise<{ session: string; name
 
   const api_sig = sign(params)
 
-  const response = await axios.get(BASE_URL, {
-    params: {
-      ...params,
-      api_sig,
-      format: "json",
-    },
-  })
+  console.log("[v0] API signature generated:", api_sig.substring(0, 10) + "...")
 
-  if (response.data.error) {
-    throw new Error(response.data.message)
-  }
+  try {
+    const response = await axios.get(BASE_URL, {
+      params: {
+        ...params,
+        api_sig,
+        format: "json",
+      },
+    })
 
-  return {
-    session: response.data.session.key,
-    name: response.data.session.name,
+    console.log("[v0] Last.fm API response status:", response.status)
+    console.log("[v0] Last.fm API response data:", JSON.stringify(response.data))
+
+    if (response.data.error) {
+      console.error("[v0] Last.fm API error:", response.data.message)
+      throw new Error(response.data.message)
+    }
+
+    return {
+      session: response.data.session.key,
+      name: response.data.session.name,
+    }
+  } catch (error) {
+    console.error("[v0] getSession error:", error)
+    throw error
   }
 }
 
