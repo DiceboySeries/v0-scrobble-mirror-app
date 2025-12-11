@@ -6,7 +6,7 @@ import {
   addToScrobbleHistory,
   getAllMirroringUsers,
 } from "@/lib/kv"
-import { getRecentTracks, scrobbleToA } from "@/lib/lastfm"
+import { getRecentTracks, getNowPlayingTrack, scrobbleToA, updateNowPlayingToA } from "@/lib/lastfm"
 
 const CRON_AUTH_TOKEN =
   "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.QWxhZGRpbjpPcGVuU2VzYW1lU2FtcGxlUGF5bG9hZA.7f1d9c4f0c3f9e1bb28f2ac9876e8d93"
@@ -22,6 +22,19 @@ async function syncUser(username: string): Promise<{ mirrored: number; total: nu
     return { mirrored: 0, total: 0 }
   }
 
+  // Update now playing status
+  const nowPlayingTrack = await getNowPlayingTrack(config.accountB)
+  if (nowPlayingTrack) {
+    await updateNowPlayingToA(
+      {
+        artist: nowPlayingTrack.artist["#text"] || nowPlayingTrack.artist,
+        name: nowPlayingTrack.name,
+        album: nowPlayingTrack.album?.["#text"] || nowPlayingTrack.album,
+      },
+      sessionKey,
+    )
+  }
+
   const recentTracks = await getRecentTracks(config.accountB, 20)
   const history = await getScrobbleHistory(username)
   const existingTimestamps = new Set(history.map((t) => t.timestamp))
@@ -29,20 +42,7 @@ async function syncUser(username: string): Promise<{ mirrored: number; total: nu
   let mirrored = 0
 
   for (const track of recentTracks) {
-    // Check if this is a "now playing" track
-    const isNowPlaying = track["@attr"]?.nowplaying === "true"
-    
-    // Skip now playing tracks
-    if (isNowPlaying) {
-      continue
-    }
-
-    const timestamp = track.date?.uts
-    
-    // Skip tracks without timestamps
-    if (!timestamp) {
-      continue
-    }
+    const timestamp = track.date.uts
 
     if (existingTimestamps.has(timestamp)) {
       continue

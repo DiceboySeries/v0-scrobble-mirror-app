@@ -43,23 +43,7 @@ export async function GET(request: NextRequest) {
 
         // Mirror new tracks
         for (const track of recentTracks) {
-          // Check if this is a "now playing" track (has @attr with nowplaying=true)
-          const isNowPlaying = track["@attr"]?.nowplaying === "true"
-          
-          // Skip now playing tracks - they should only be scrobbled after they're actually played
-          if (isNowPlaying) {
-            console.log(`[ScrobbleMirror] Skipping now playing track: ${track.name}`)
-            continue
-          }
-
-          // Get timestamp from track
-          const timestamp = track.date?.uts
-          
-          // Skip tracks without timestamps
-          if (!timestamp) {
-            console.log(`[ScrobbleMirror] Skipping track without timestamp: ${track.name}`)
-            continue
-          }
+          const timestamp = track.date.uts
 
           // Skip if already mirrored
           if (existingTimestamps.has(timestamp)) {
