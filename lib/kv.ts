@@ -21,7 +21,22 @@ async function getJSON<T>(key: string): Promise<T | null> {
     if (blobs.length === 0) return null
     
     const response = await fetch(blobs[0].url)
-    return await response.json()
+    
+    // Check if response is ok
+    if (!response.ok) {
+      console.log(`[Blob] Blob not found: ${key}`)
+      return null
+    }
+    
+    const text = await response.text()
+    
+    // Check if it's valid JSON
+    try {
+      return JSON.parse(text)
+    } catch {
+      console.log(`[Blob] Invalid JSON in blob: ${key}`)
+      return null
+    }
   } catch (error) {
     console.error(`[Blob] Error getting ${key}:`, error)
     return null
@@ -29,24 +44,53 @@ async function getJSON<T>(key: string): Promise<T | null> {
 }
 
 async function putJSON<T>(key: string, data: T): Promise<void> {
-  try {
-    // Check if blob exists
-    const { blobs } = await list({ prefix: key, limit: 1 })
-    
-    if (blobs.length > 0) {
-      // Delete existing blob first
-      await del(blobs[0].url)
+  const maxRetries = 3
+  let attempt = 0
+  
+  while (attempt < maxRetries) {
+    try {
+      // Check if blob exists and delete it
+      const { blobs } = await list({ prefix: key, limit: 10 })
+      
+      if (blobs.length > 0) {
+        console.log(`[Blob] Deleting ${blobs.length} existing blob(s) for ${key}`)
+        // Delete all matching blobs
+        for (const blob of blobs) {
+          try {
+            await del(blob.url)
+          } catch (delError) {
+            console.error(`[Blob] Error deleting blob:`, delError)
+          }
+        }
+        // Wait a bit for deletion to complete
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      
+      // Put new blob
+      await put(key, JSON.stringify(data), {
+        access: 'public',
+        addRandomSuffix: false,
+      })
+      
+      console.log(`[Blob] Successfully put ${key}`)
+      return // Success!
+      
+    } catch (error: any) {
+      attempt++
+      
+      if (error?.message?.includes('already exists')) {
+        console.log(`[Blob] Blob still exists on attempt ${attempt}, retrying...`)
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 200 * attempt))
+        continue
+      }
+      
+      console.error(`[Blob] Error putting ${key}:`, error)
+      throw error
     }
-    
-    // Put new blob
-    await put(key, JSON.stringify(data), {
-      access: 'public',
-      addRandomSuffix: false,
-    })
-  } catch (error) {
-    console.error(`[Blob] Error putting ${key}:`, error)
-    throw error
   }
+  
+  throw new Error(`Failed to put ${key} after ${maxRetries} attempts`)
 }
 
 // Session key functions
