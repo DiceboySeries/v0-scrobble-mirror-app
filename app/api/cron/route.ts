@@ -6,7 +6,7 @@ import {
   getScrobbleHistory,
   addToScrobbleHistory,
 } from "@/lib/kv"
-import { getRecentTracks, scrobbleToA } from "@/lib/lastfm"
+import { getRecentTracks, scrobbleToA, updateNowPlaying } from "@/lib/lastfm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +43,30 @@ export async function GET(request: NextRequest) {
 
         // Mirror new tracks
         for (const track of recentTracks) {
-          const timestamp = track.date.uts
+          // Check if this is a "now playing" track
+          const isNowPlaying = track["@attr"]?.nowplaying === "true"
+          
+          if (isNowPlaying) {
+            // Mirror as Now Playing on Account A
+            console.log(`[ScrobbleMirror] Updating Now Playing: ${track.name}`)
+            await updateNowPlaying(
+              {
+                artist: track.artist["#text"] || track.artist,
+                name: track.name,
+                album: track.album?.["#text"] || track.album,
+              },
+              sessionKey,
+            )
+            continue // Don't scrobble now playing tracks
+          }
+
+          // Get timestamp from track
+          const timestamp = track.date?.uts
+          
+          // Skip tracks without timestamps
+          if (!timestamp) {
+            continue
+          }
 
           // Skip if already mirrored
           if (existingTimestamps.has(timestamp)) {

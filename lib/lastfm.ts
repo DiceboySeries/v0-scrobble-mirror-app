@@ -64,8 +64,54 @@ export async function getRecentTracks(username: string, limit = 10) {
 
   const tracks = response.data.recenttracks?.track || []
 
-  // Filter out "now playing" tracks (they don't have a timestamp)
-  return Array.isArray(tracks) ? tracks.filter((t: any) => t.date?.uts) : tracks.date?.uts ? [tracks] : []
+  // Return all tracks including "now playing" (we'll handle them separately)
+  return Array.isArray(tracks) ? tracks : tracks ? [tracks] : []
+}
+
+// Update Now Playing for a track
+export async function updateNowPlaying(
+  track: { artist: string; name: string; album?: string },
+  sessionKey: string,
+): Promise<boolean> {
+  const params: Record<string, string> = {
+    method: "track.updateNowPlaying",
+    api_key: API_KEY,
+    sk: sessionKey,
+    artist: track.artist,
+    track: track.name,
+  }
+
+  if (track.album) {
+    params.album = track.album
+  }
+
+  const api_sig = sign(params)
+
+  try {
+    const response = await axios.post(
+      BASE_URL,
+      new URLSearchParams({
+        ...params,
+        api_sig,
+        format: "json",
+      }).toString(),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      },
+    )
+
+    if (response.data.error) {
+      console.error("Now Playing error:", response.data.message)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error("Now Playing error:", error)
+    return false
+  }
 }
 
 // Scrobble a track to Account A
