@@ -1,38 +1,20 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 
 export default function HomePage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [username, setUsername] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const storedUsername = localStorage.getItem("lastfm_username")
     setUsername(storedUsername)
-
-    const errorParam = searchParams.get("error")
-    if (errorParam) {
-      switch (errorParam) {
-        case "no_token":
-          setError("Authentication failed: No token received from Last.fm")
-          break
-        case "auth_failed":
-          setError("Authentication failed: Unable to verify with Last.fm. Check console logs for details.")
-          break
-        default:
-          setError("Authentication failed: Unknown error")
-      }
-    }
-
     setLoading(false)
-  }, [searchParams])
+  }, [])
 
   const handleLogin = () => {
-    setError(null)
     window.location.href = "/api/login"
   }
 
@@ -70,16 +52,6 @@ export default function HomePage() {
               Automatically mirror Last.fm scrobbles between accounts
             </p>
           </div>
-
-          {error && (
-            <div className="border border-foreground bg-foreground/5 p-6 text-left">
-              <p className="text-xs tracking-wider uppercase text-muted-foreground mb-2">Error</p>
-              <p className="text-sm tracking-wide font-light">{error}</p>
-              <p className="text-xs tracking-wide text-muted-foreground mt-4">
-                Make sure LASTFM_API_KEY, LASTFM_SECRET, and NEXT_PUBLIC_DOMAIN are configured correctly.
-              </p>
-            </div>
-          )}
 
           {/* Action Section */}
           <div className="space-y-6">
