@@ -1,10 +1,4 @@
-import { Redis } from "@upstash/redis"
-
-// Initialize Upstash Redis client
-export const kv = new Redis({
-  url: process.env.KV_REST_API_URL!,
-  token: process.env.KV_REST_API_TOKEN!,
-})
+import { put, list, del } from '@vercel/blob'
 
 // Helper types
 export interface MirrorConfig {
@@ -20,18 +14,53 @@ export interface ScrobbledTrack {
   mirroredAt: string
 }
 
-// KV helper functions
+// Simple JSON storage helpers
+async function getJSON<T>(key: string): Promise<T | null> {
+  try {
+    const { blobs } = await list({ prefix: key, limit: 1 })
+    if (blobs.length === 0) return null
+    
+    const response = await fetch(blobs[0].url)
+    return await response.json()
+  } catch (error) {
+    console.error(`[Blob] Error getting ${key}:`, error)
+    return null
+  }
+}
+
+async function putJSON<T>(key: string, data: T): Promise<void> {
+  try {
+    // Delete old version first
+    const { blobs } = await list({ prefix: key, limit: 1 })
+    for (const blob of blobs) {
+      await del(blob.url)
+    }
+    
+    // Put new version
+    await put(key, JSON.stringify(data), {
+      access: 'public',
+      addRandomSuffix: false,
+    })
+  } catch (error) {
+    console.error(`[Blob] Error putting ${key}:`, error)
+    throw error
+  }
+}
+
+// Session key functions
 export async function getSessionKey(username: string): Promise<string | null> {
-  return await kv.get(`session:${username}`)
+  const data = await getJSON<string>(`session/${username}.json`)
+  return data
 }
 
 export async function setSessionKey(username: string, sessionKey: string): Promise<void> {
-  await kv.set(`session:${username}`, sessionKey)
+  await putJSON(`session/${username}.json`, sessionKey)
 }
 
+// Mirror config functions
 export async function getMirrorConfig(username: string): Promise<MirrorConfig | null> {
-  const accountB = await kv.get<string>(`mirror:${username}`)
-  const enabled = await kv.get<boolean>(`enabled:${username}`)
+  const accountB = await getJSON<string>(`mirror/${username}.json`)
+  const enabled = await getJSON<boolean>(`enabled/${username}.json`)
 
   if (!accountB) return null
 
@@ -42,41 +71,54 @@ export async function getMirrorConfig(username: string): Promise<MirrorConfig | 
 }
 
 export async function setMirrorConfig(username: string, accountB: string): Promise<void> {
-  await kv.set(`mirror:${username}`, accountB)
-  await kv.set(`enabled:${username}`, true)
+  await putJSON(`mirror/${username}.json`, accountB)
+  await putJSON(`enabled/${username}.json`, true)
 }
 
 export async function setMirrorEnabled(username: string, enabled: boolean): Promise<void> {
-  await kv.set(`enabled:${username}`, enabled)
+  await putJSON(`enabled/${username}.json`, enabled)
 }
 
+// Scrobble history functions
 export async function getScrobbleHistory(username: string): Promise<ScrobbledTrack[]> {
-  const history = await kv.get<ScrobbledTrack[]>(`history:${username}`)
+  const history = await getJSON<ScrobbledTrack[]>(`history/${username}.json`)
   return history || []
 }
 
 export async function addToScrobbleHistory(username: string, track: ScrobbledTrack): Promise<void> {
   const history = await getScrobbleHistory(username)
+  
+  // Check for duplicates by timestamp
+  if (history.some(t => t.timestamp === track.timestamp)) {
+    console.log('[Blob] Track already exists in history (duplicate), ignoring')
+    return
+  }
+  
   history.unshift(track)
 
   // Keep only last 100 tracks
   const trimmed = history.slice(0, 100)
-  await kv.set(`history:${username}`, trimmed)
+  await putJSON(`history/${username}.json`, trimmed)
 }
 
 export async function getAllMirroringUsers(): Promise<string[]> {
-  // Get all keys that match the pattern "enabled:*"
-  const keys = await kv.keys("enabled:*")
-  const users: string[] = []
+  try {
+    // Get all keys that match the pattern "enabled/*"
+    const { blobs } = await list({ prefix: 'enabled/' })
+    const users: string[] = []
 
-  for (const key of keys) {
-    const enabled = await kv.get<boolean>(key)
-    if (enabled) {
-      // Extract username from "enabled:username"
-      const username = key.replace("enabled:", "")
-      users.push(username)
+    for (const blob of blobs) {
+      const enabled = await getJSON<boolean>(blob.pathname)
+      if (enabled) {
+        // Extract username from "enabled/username.json"
+        const username = blob.pathname.replace('enabled/', '').replace('.json', '')
+        users.push(username)
+      }
     }
-  }
 
-  return users
+    return users
+  } catch (error) {
+    console.error('[Blob] Error getting all mirroring users:', error)
+    return []
+  }
 }
