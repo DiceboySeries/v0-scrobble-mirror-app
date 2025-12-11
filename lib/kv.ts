@@ -1,4 +1,4 @@
-import { put, list, del } from '@vercel/blob'
+import { put, list, del, copy } from '@vercel/blob'
 
 // Helper types
 export interface MirrorConfig {
@@ -30,13 +30,15 @@ async function getJSON<T>(key: string): Promise<T | null> {
 
 async function putJSON<T>(key: string, data: T): Promise<void> {
   try {
-    // Delete old version first
+    // Check if blob exists
     const { blobs } = await list({ prefix: key, limit: 1 })
-    for (const blob of blobs) {
-      await del(blob.url)
+    
+    if (blobs.length > 0) {
+      // Delete existing blob first
+      await del(blobs[0].url)
     }
     
-    // Put new version
+    // Put new blob
     await put(key, JSON.stringify(data), {
       access: 'public',
       addRandomSuffix: false,
